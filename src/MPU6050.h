@@ -5,9 +5,6 @@
 #include "pico/binary_info.h"
 #include "hardware/i2c.h"
 
-#define PICO_I2C_SDA_PIN 16
-#define PICO_I2C_SCL_PIN 17
-
 template <typename T>
 struct acc_3D{
     T x, y, z;
