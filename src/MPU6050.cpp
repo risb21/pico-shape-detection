@@ -4,8 +4,8 @@ MPU6050::MPU6050(int sda_pin = 4, int scl_pin = 5) {
     // 400kHz baud rate
     i2c_init(i2c_default, 400 * 1000);
 
-    gpio_set_function(sda_pin, GPIO_FUNC_I2C); // 16
-    gpio_set_function(scl_pin, GPIO_FUNC_I2C); // 17
+    gpio_set_function(sda_pin, GPIO_FUNC_I2C);
+    gpio_set_function(scl_pin, GPIO_FUNC_I2C);
     gpio_pull_up(sda_pin);
     gpio_pull_up(scl_pin);
 
@@ -69,7 +69,6 @@ acc_3D<uint16_t> MPU6050::get_acc_offset() {
 // Reset the MPU6050 and then wake it up
 void MPU6050::reset() {
     // Two byte reset. First byte register, second byte data
-    // There are a load more options to set up the device in different ways that could be added here
     uint8_t reset[] = {0x6B, 0x80};
     i2c_write_blocking(i2c_default, address, reset, 2, false);
     sleep_ms(200);

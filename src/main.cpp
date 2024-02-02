@@ -3,23 +3,62 @@
 #include "hardware/gpio.h"
 
 // Arbirtary, the ANN has this many input nodes per acceleration recording
-#define MAX_RECORD_LENGTH 83
+#define MAX_RECORD_LEN 83
 
-bool record;
-uint8_t current_recording;
+bool record, print_once;
+uint8_t curr_row;
 
 // 83 data points, for 3 axes
-float recorded_data[MAX_RECORD_LENGTH][3];
+acc_3D<float> *rec_data;
 
-// Pins numbers
+// Pin numbers for each function,
+// set according to wiring
 enum Pin {
     // buttons
     b_send = 13u,
     b_record,
 
+    // I2C pins
+    mpu_sda = 16u,
+    mpu_scl,
+
     // LEDs
-    
+
 };
+
+template<typename T>
+void struct_memset(acc_3D<T> *acc, T val, size_t size) {
+    for (int i = 0; i < size; i++)
+        acc[i] = {
+            .x = val,
+            .y = val,
+            .z = val
+        };
+}
+
+void print_data() {
+    printf("    +-------+-------+-------+\n"
+           "    | acc_x | acc_y | acc_z |\n"
+           "    +-------+-------+-------+\n");
+    for (int row = 0; row < 5; row++)
+        printf("%2d. |%7.3f|%7.3f|%7.3f|\n", row+1,
+                rec_data[row].x,
+                rec_data[row].y,
+                rec_data[row].z
+        );
+
+    printf("    +-------+-------+-------+\n"
+           "               ...           \n"
+           "    +-------+-------+-------+\n");
+    for (int row = MAX_RECORD_LEN - 5; row < MAX_RECORD_LEN; row++)
+        printf("%2d. |%7.3f|%7.3f|%7.3f|\n", row+1,
+                rec_data[row].x,
+                rec_data[row].y,
+                rec_data[row].z
+        );
+
+    printf("    +-------+-------+-------+\n");
+}
 
 
 void recording(uint gpio, uint32_t events) {
@@ -27,28 +66,21 @@ void recording(uint gpio, uint32_t events) {
     
     case GPIO_IRQ_EDGE_RISE:
         printf("Button pressed down\n");
-        for (int i = 0; i < MAX_RECORD_LENGTH; i++)
-            recorded_data[i][0] = recorded_data[i][0] = 
-            recorded_data[i][0] = .0f;
-        current_recording = 0;
+
+        struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
+        curr_row = 0;
         record = true;
         break;
     
     case GPIO_IRQ_EDGE_FALL:
         printf("Button released\n");
+        
         record = false;
-        printf("+-------+-------+-------+\n"
-               "| acc_x | acc_y | acc_z |\n"
-               "+-------+-------+-------+\n");
-        for (int row = 10; row < MAX_RECORD_LENGTH; row++) {
-            printf("|%7.3f|%7.3f|%7.3f|\n", recorded_data[row][0], recorded_data[row][1], recorded_data[row][2]);
-            // sleep_ms(50);
-        }
-        printf("+-------+-------+-------+\n\n");
+        print_once = true;
         break;
 
     default:
-        printf("Invalid mode of triggering interrupt on pin: %d, event no.: %d", gpio, events);
+        printf("Invalid mode of triggering interrupt on pin: %d, event no.: %d\n", gpio, events);
         break;
     }
 }
@@ -58,7 +90,7 @@ int main() {
     // setup phase
     stdio_init_all();
     // init MPU6050 library and wake
-    MPU6050 mpu(16, 17);
+    MPU6050 mpu(Pin::mpu_sda, Pin::mpu_scl);
 
     // irq setup
     gpio_init(Pin::b_record);
@@ -67,31 +99,42 @@ int main() {
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &recording);
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &recording);
 
-    record = false;
-    current_recording = 0;
-    for (int i = 0; i < MAX_RECORD_LENGTH; i++)
-        recorded_data[i][0] = recorded_data[i][0] = 
-        recorded_data[i][0] = .0f;
+    record = print_once = false;
+    curr_row = 0;
+    rec_data = new acc_3D<float>[MAX_RECORD_LEN];
+    struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
+
 
     // Job loop
     while (1) {
-        if (current_recording < 83) {
+        if (rec_data == nullptr) {
+            printf("Could not allocate struct array\r");
+            sleep_ms(1000);
+            continue;
+        }
+
+        if (print_once) {
+            print_once = false;
+            print_data();
+        }
+
+        if (curr_row < 83) {
             if (record) {
-                acc_3D<float> read = mpu.read_acceleration();
-                recorded_data[current_recording][0] = read.x;
-                recorded_data[current_recording][1] = read.y;
-                recorded_data[current_recording][2] = read.z;
-                printf("Accelecration: x: %6.3f y: %6.3f z: %6.3f\n",
-                        recorded_data[current_recording][0],
-                        recorded_data[current_recording][1],
-                        recorded_data[current_recording][2]
-                );
-                current_recording++;
+                rec_data[curr_row] = mpu.read_acceleration();
+
+                // Print slow enough to read values
+                if (curr_row % 5 == 0)
+                    printf("Acceleration: x: %6.3f y: %6.3f z: %6.3f\r",
+                            rec_data[curr_row].x,
+                            rec_data[curr_row].y,
+                            rec_data[curr_row].z
+                    );
+                curr_row++;
             }
-        } else {
+        } else if (record) {
             printf("Overflow!!!\n");
         }
 
-        sleep_ms(50);
+        sleep_ms(20);
     }
 }
