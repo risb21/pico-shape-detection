@@ -14,6 +14,7 @@ public:
     int init();
     void* input_data();
     float predict();
+    bool is_op_successful(TfLiteStatus s);
 
     float input_scale() const;
     int32_t input_zero_point() const;

@@ -13,6 +13,7 @@ add_executable(pico_acc
 	${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/MPU6050.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tflite_wrapper.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/shape_model.hpp
 )
 
 
@@ -32,4 +33,4 @@ pico_enable_stdio_uart(pico_acc 0)
 
 pico_add_extra_outputs(pico_acc)
 
-add_subdirectory("lib/pico-tflmicro" EXCLUDE_FROM_ALL)
+add_subdirectory("lib/tflmicro" EXCLUDE_FROM_ALL)

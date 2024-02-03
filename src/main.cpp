@@ -2,6 +2,7 @@
 
 #include "MPU6050.hpp"
 #include "tflite_wrapper.hpp"
+#include "shape_model.hpp"
 
 #include "hardware/gpio.h"
 #include "pico/cyw43_arch.h"
@@ -9,11 +10,11 @@
 // Arbirtary, the ANN has this many input nodes per acceleration recording
 #define MAX_RECORD_LEN 83
 
-bool record, print_once;
-uint8_t curr_row;
+uint8_t curr_row, flags;
 
 // 83 data points, for 3 axes
 acc_3D<float> *rec_data;
+
 
 // Pin numbers for each function,
 // set according to wiring
@@ -31,6 +32,13 @@ enum Pin {
 
     // LEDs
 
+};
+
+// Flags for operations used by buttons
+enum Flag {
+    record = 0b1,
+    print_once = 0b1 << 1,
+    predict = 0b1 << 2,
 };
 
 template<typename T>
@@ -67,6 +75,9 @@ void print_data() {
     printf("    +-------+-------+-------+\n");
 }
 
+void prediction(uint gpio, uint32_t events) {
+
+}
 
 void recording(uint gpio, uint32_t events) {
 
@@ -77,15 +88,18 @@ void recording(uint gpio, uint32_t events) {
 
         struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
         curr_row = 0;
-        record = true;
+        // Set record flag
+        flags |= Flag::record;
         cyw43_arch_gpio_put(Pin::cyw43_led, 1);
         break;
     
     case GPIO_IRQ_EDGE_FALL:
         printf("Button released\n");
         
-        record = false;
-        print_once = true;
+        // unset record flag
+        flags &= 0xFF ^ Flag::record;
+        // Set print once flag
+        flags |= Flag::print_once;
         cyw43_arch_gpio_put(Pin::cyw43_led, 0);
         break;
 
@@ -98,7 +112,9 @@ void recording(uint gpio, uint32_t events) {
 
 int main() {
 
-    // setup phase
+ /* -------------
+     setup phase 
+    ------------- */
     stdio_init_all();
     if (cyw43_arch_init()) {
         printf("Wi-Fi init failed\n");
@@ -117,14 +133,28 @@ int main() {
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &recording);
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &recording);
 
-    record = print_once = false;
+    flags = 0b0;
     curr_row = 0;
     rec_data = new acc_3D<float>[MAX_RECORD_LEN];
     struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
 
+    printf("Attempting to init the model\n");
+
+    // Initialize ML model
+    TFLMicro model(shape_model, shape_model_len);
+    int init_status = model.init();
+
+    if (!init_status)
+        while (1) {
+            printf("Could not initialize model\n");
+            sleep_ms(2000);
+        }
+
     printf("[OK] Device Ready\n");
 
-    // Job loop
+ /* -----------
+     Job loop 
+    ----------- */
     while (true) {
         if (rec_data == nullptr) {
             printf("Could not allocate struct array\r");
@@ -132,12 +162,12 @@ int main() {
             continue;
         }
 
-        if (print_once) {
-            print_once = false;
+        if (flags & Flag::print_once) {
+            flags &= 0xFF ^ Flag::print_once;
             print_data();
         }
 
-        if (record) {
+        if (flags & Flag::record) {
             if (curr_row < 83) {
                 rec_data[curr_row] = mpu.read_acceleration();
 

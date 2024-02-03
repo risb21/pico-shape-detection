@@ -1,6 +1,6 @@
 #include "tflite_wrapper.hpp"
 
-bool is_op_successful(TfLiteStatus s) {
+bool TFLMicro::is_op_successful(TfLiteStatus s) {
     if (s != kTfLiteOk)
         return false;
     
@@ -39,18 +39,29 @@ int TFLMicro::init() {
         return 0;
     }
 
-    static tflite::MicroMutableOpResolver<3> resolver;
+    _tensor_arena = new uint8_t[_tensor_arena_size];
+    if (_tensor_arena == nullptr) {
+        MicroPrintf("Failed to allocate tensor arena\n");
+        return 0;
+    }
+
+    static tflite::MicroMutableOpResolver<4> resolver;
     TfLiteStatus resolve_status = resolver.AddFullyConnected();
     if (!is_op_successful(resolve_status)) {
         MicroPrintf("Op resolution failed");
         return 0;
     }
-    TfLiteStatus resolve_status = resolver.AddSoftmax();
+    resolve_status = resolver.AddReshape();
     if (!is_op_successful(resolve_status)) {
         MicroPrintf("Op resolution failed");
         return 0;
     }
-    TfLiteStatus resolve_status = resolver.AddRelu();
+    resolve_status = resolver.AddSoftmax();
+    if (!is_op_successful(resolve_status)) {
+        MicroPrintf("Op resolution failed");
+        return 0;
+    }
+    resolve_status = resolver.AddRelu();
     if (!is_op_successful(resolve_status)) {
         MicroPrintf("Op resolution failed");
         return 0;
