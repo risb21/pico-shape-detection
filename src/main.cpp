@@ -7,7 +7,7 @@
 #include "hardware/gpio.h"
 #include "pico/cyw43_arch.h"
 
-// Arbirtary, the ANN has this many input nodes per acceleration recording
+// Arbirtary, the ANN has this many input nodes per acceleration handle_irq
 #define MAX_RECORD_LEN 83
 
 uint8_t curr_row, flags;
@@ -23,7 +23,7 @@ enum Pin {
     cyw43_led = 0u,
 
     // buttons
-    b_send = 13u,
+    b_predict = 13u,
     b_record,
 
     // I2C pins
@@ -75,12 +75,16 @@ void print_data() {
     printf("    +-------+-------+-------+\n");
 }
 
-void prediction(uint gpio, uint32_t events) {
 
-}
+void handle_irq(uint gpio, uint32_t events) {
+    // Handle predict button
+    if (gpio == Pin::b_predict) {
+        flags |= Flag::predict;
+        printf("Predicting...\n");
+        return;
+    }
 
-void recording(uint gpio, uint32_t events) {
-
+    // Handle Record button
     switch (events) {
     
     case GPIO_IRQ_EDGE_RISE:
@@ -100,13 +104,14 @@ void recording(uint gpio, uint32_t events) {
         flags &= 0xFF ^ Flag::record;
         // Set print once flag
         flags |= Flag::print_once;
+
         cyw43_arch_gpio_put(Pin::cyw43_led, 0);
         break;
 
     default:
         printf("Invalid mode of triggering interrupt on pin: %d, event no.: %d\n"
                "Restarting...\n", gpio, events);
-        recording(gpio, GPIO_IRQ_EDGE_RISE);
+        handle_irq(gpio, GPIO_IRQ_EDGE_RISE);
     }
 }
 
@@ -116,29 +121,39 @@ int main() {
      setup phase 
     ------------- */
     stdio_init_all();
+
+    sleep_ms(1000);
+
     if (cyw43_arch_init()) {
-        printf("Wi-Fi init failed\n");
+        printf("[ERROR] Wi-Fi init failed\n");
         return -1;
     }
 
-    printf("LED state: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
+    printf("LED status: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
+
+    printf("[OK] cyw43 wireless module initialized\n");
 
     // init MPU6050 library and wake
     MPU6050 mpu(Pin::mpu_sda, Pin::mpu_scl);
+    printf("[OK] MPU6050 accelerometer initialized\n");
 
     // irq setup
+    // Record button
     gpio_init(Pin::b_record);
     gpio_set_dir(Pin::b_record, GPIO_IN);
     gpio_pull_down(Pin::b_record);
-    gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &recording);
-    gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &recording);
+    gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &handle_irq);
+    gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &handle_irq);
+    // Predict button
+    gpio_init(Pin::b_predict);
+    gpio_set_dir(Pin::b_predict, GPIO_IN);
+    gpio_pull_down(Pin::b_predict);
+    gpio_set_irq_enabled_with_callback(Pin::b_predict, GPIO_IRQ_EDGE_RISE, true, &handle_irq);
 
     flags = 0b0;
     curr_row = 0;
     rec_data = new acc_3D<float>[MAX_RECORD_LEN];
     struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
-
-    printf("Attempting to init the model\n");
 
     // Initialize ML model
     TFLMicro model(shape_model, shape_model_len);
@@ -146,9 +161,20 @@ int main() {
 
     if (!init_status)
         while (1) {
-            printf("Could not initialize model\n");
+            printf("[ERROR] Could not initialize model\n");
             sleep_ms(2000);
         }
+    printf("[OK] Machine learning model initialized\n");
+
+    // Model interaction pointers
+    float *input = model._input_tensor -> data.f;
+
+    if (input == nullptr) {
+        while (true) {
+            printf("Input tensor could not be allocated\n");
+            sleep_ms(2000);
+        }        
+    }
 
     printf("[OK] Device Ready\n");
 
@@ -156,13 +182,9 @@ int main() {
      Job loop 
     ----------- */
     while (true) {
-        if (rec_data == nullptr) {
-            printf("Could not allocate struct array\r");
-            sleep_ms(1000);
-            continue;
-        }
 
         if (flags & Flag::print_once) {
+            // Unset print once flag
             flags &= 0xFF ^ Flag::print_once;
             print_data();
         }
@@ -182,6 +204,34 @@ int main() {
             } else {
                 printf("Overflow!!!\n");
             }
+        }
+
+        if (flags & Flag::predict) {
+            // Unset predict flag
+            flags &= 0xFF ^ Flag::predict;
+
+            float scale = model.input_scale();
+            int32_t zp = model.input_zero_point();
+            for (int line = 0; line < MAX_RECORD_LEN; line++) {
+                input[line*3] = rec_data[line].x;
+                input[line*3 + 1] = rec_data[line].y;
+                input[line*3 + 2] = rec_data[line].z;
+            }
+
+            float *pred = reinterpret_cast<float *>(model.predict());
+
+            if (pred == nullptr) {
+                printf("Error in predicting shape\n");
+                continue;
+            }
+
+            printf("+----------+----------+----------+\n"
+                   "|  Circle  |  Square  | Triangle |\n"
+                   "+----------+----------+----------+\n"
+                   "| %8.3f | %8.3f | %8.3f |\n"
+                   "+----------+----------+----------+\n",
+                   pred[0], pred[1], pred[2]);
+
         }
 
         sleep_ms(20);

@@ -77,8 +77,8 @@ int TFLMicro::init() {
         return 0;
     }
 
-    _input_tensor = _interpreter -> input(0);
-    _output_tensor = _interpreter -> output(0);
+    _input_tensor = static_interpreter.input(0);
+    // _output_tensor = static_interpreter.output(0);
 
     return 1;
 }
@@ -91,17 +91,20 @@ void* TFLMicro::input_data() {
     return _input_tensor -> data.data;
 }
 
-float TFLMicro::predict() {
+void* TFLMicro::predict() {
     TfLiteStatus invoke_status = _interpreter -> Invoke();
 
     if (invoke_status != kTfLiteOk) {
-        return NAN;
+        MicroPrintf("Could not Invoke interpreter\n");
+        return nullptr;
     }
 
-    float y_quantized = _output_tensor -> data.int8[0];
-    float y = (y_quantized - _output_tensor -> params.zero_point) *
-              _output_tensor -> params.scale;
-    return y;
+    _output_tensor = _interpreter -> output(0);
+
+    // float y_quantized = _output_tensor -> data.f;
+    // float y = (y_quantized - _output_tensor -> params.zero_point) *
+    //           _output_tensor -> params.scale;
+    return _output_tensor -> data.data;
 }
 
 

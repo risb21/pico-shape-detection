@@ -6,6 +6,8 @@
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
+#define CLASSIFIED_SHAPES 3
+
 class TFLMicro {
 public:
     TFLMicro(const unsigned char tflite_model[], int tensor_arena_size);
@@ -13,11 +15,13 @@ public:
 
     int init();
     void* input_data();
-    float predict();
+    void* predict();
     bool is_op_successful(TfLiteStatus s);
 
     float input_scale() const;
     int32_t input_zero_point() const;
+    TfLiteTensor *_input_tensor, *_output_tensor;
+    tflite::MicroInterpreter *_interpreter;
 
 private:
     const unsigned char* _tflite_model;
@@ -25,7 +29,4 @@ private:
     uint8_t *_tensor_arena;
 
     const tflite::Model *_model;
-    tflite::MicroInterpreter *_interpreter;
-    TfLiteTensor *_input_tensor, *_output_tensor;
-
 };
