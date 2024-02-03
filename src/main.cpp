@@ -1,5 +1,8 @@
 #include <stdio.h>
-#include "MPU6050.h"
+
+#include "MPU6050.hpp"
+#include "tflite_wrapper.hpp"
+
 #include "hardware/gpio.h"
 #include "pico/cyw43_arch.h"
 
@@ -102,7 +105,7 @@ int main() {
         return -1;
     }
 
-    // printf("LED state: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
+    printf("LED state: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
 
     // init MPU6050 library and wake
     MPU6050 mpu(Pin::mpu_sda, Pin::mpu_scl);
@@ -114,7 +117,7 @@ int main() {
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &recording);
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &recording);
 
-    record = print_once = invalid_trigger = false;
+    record = print_once = false;
     curr_row = 0;
     rec_data = new acc_3D<float>[MAX_RECORD_LEN];
     struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
@@ -134,8 +137,8 @@ int main() {
             print_data();
         }
 
-        if (curr_row < 83) {
-            if (record) {
+        if (record) {
+            if (curr_row < 83) {
                 rec_data[curr_row] = mpu.read_acceleration();
 
                 // Print slow enough to read values
@@ -146,9 +149,9 @@ int main() {
                             rec_data[curr_row].z
                     );
                 curr_row++;
+            } else {
+                printf("Overflow!!!\n");
             }
-        } else if (record) {
-            printf("Overflow!!!\n");
         }
 
         sleep_ms(20);

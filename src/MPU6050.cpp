@@ -1,4 +1,4 @@
-#include "MPU6050.h"
+#include "MPU6050.hpp"
 
 MPU6050::MPU6050(int sda_pin = 4, int scl_pin = 5) {
     // 400kHz baud rate

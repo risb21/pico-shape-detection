@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-set(PICO_BOARD pico_w)
+# set(PICO_BOARD pico_w)
 include(pico_sdk_import.cmake)
 
 project(pico_acc C CXX ASM)
@@ -12,17 +12,18 @@ pico_sdk_init()
 add_executable(pico_acc
 	${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/MPU6050.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tflite_wrapper.cpp
 )
 
 
-target_include_directories(pico_acc
-PRIVATE ${CMAKE_CURRENT_LIST_DIR}
+target_include_directories(pico_acc PRIVATE
+	${CMAKE_CURRENT_LIST_DIR}
 )
 
 target_link_libraries(pico_acc
 	pico_stdlib
+	pico-tflmicro
 	hardware_i2c
-	# pico_cyw43_arch_none
 	pico_cyw43_arch_lwip_threadsafe_background
 )
 
@@ -31,4 +32,4 @@ pico_enable_stdio_uart(pico_acc 0)
 
 pico_add_extra_outputs(pico_acc)
 
-# example_auto_set_url(pico_acc)
+add_subdirectory("lib/pico-tflmicro" EXCLUDE_FROM_ALL)

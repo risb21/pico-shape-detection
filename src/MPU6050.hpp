@@ -1,5 +1,4 @@
-#ifndef MPU6050_H_
-#define MPU6050_H_
+#pragma once
 
 #include "pico/stdlib.h"
 #include "pico/binary_info.h"
@@ -29,5 +28,3 @@ private:
     
     void reset();
 };
-
-#endif
