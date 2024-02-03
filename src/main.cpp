@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "MPU6050.h"
 #include "hardware/gpio.h"
+#include "pico/cyw43_arch.h"
 
 // Arbirtary, the ANN has this many input nodes per acceleration recording
 #define MAX_RECORD_LEN 83
@@ -14,6 +15,9 @@ acc_3D<float> *rec_data;
 // Pin numbers for each function,
 // set according to wiring
 enum Pin {
+    // onboard LED
+    cyw43_led = 0u,
+
     // buttons
     b_send = 13u,
     b_record,
@@ -62,6 +66,7 @@ void print_data() {
 
 
 void recording(uint gpio, uint32_t events) {
+
     switch (events) {
     
     case GPIO_IRQ_EDGE_RISE:
@@ -70,6 +75,7 @@ void recording(uint gpio, uint32_t events) {
         struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
         curr_row = 0;
         record = true;
+        cyw43_arch_gpio_put(Pin::cyw43_led, 1);
         break;
     
     case GPIO_IRQ_EDGE_FALL:
@@ -77,11 +83,13 @@ void recording(uint gpio, uint32_t events) {
         
         record = false;
         print_once = true;
+        cyw43_arch_gpio_put(Pin::cyw43_led, 0);
         break;
 
     default:
-        printf("Invalid mode of triggering interrupt on pin: %d, event no.: %d\n", gpio, events);
-        break;
+        printf("Invalid mode of triggering interrupt on pin: %d, event no.: %d\n"
+               "Restarting...\n", gpio, events);
+        recording(gpio, GPIO_IRQ_EDGE_RISE);
     }
 }
 
@@ -89,6 +97,13 @@ int main() {
 
     // setup phase
     stdio_init_all();
+    if (cyw43_arch_init()) {
+        printf("Wi-Fi init failed\n");
+        return -1;
+    }
+
+    // printf("LED state: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
+
     // init MPU6050 library and wake
     MPU6050 mpu(Pin::mpu_sda, Pin::mpu_scl);
 
@@ -99,14 +114,15 @@ int main() {
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_RISE, true, &recording);
     gpio_set_irq_enabled_with_callback(Pin::b_record, GPIO_IRQ_EDGE_FALL, true, &recording);
 
-    record = print_once = false;
+    record = print_once = invalid_trigger = false;
     curr_row = 0;
     rec_data = new acc_3D<float>[MAX_RECORD_LEN];
     struct_memset<float>(rec_data, .0f, MAX_RECORD_LEN);
 
+    printf("[OK] Device Ready\n");
 
     // Job loop
-    while (1) {
+    while (true) {
         if (rec_data == nullptr) {
             printf("Could not allocate struct array\r");
             sleep_ms(1000);

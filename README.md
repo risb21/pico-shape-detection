@@ -22,11 +22,11 @@ Running a shape detection machine learning model using accelerometer data on the
 - minicom
 - ~~[tflite-micro library for the Raspberry Pi Pico]()~~ (not implemented yet)
 
-For the pico-sdk, follow the guide in [Raspberry Pi Pico C/C++ SDK](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) for Windows and Debian-based<sup>[1]</sup> systems. Since I use Arch, I followed the following guide to install the sdk: [Arch Linux guide](https://loads.pickle.me.uk/2021/01/25/compiling-for-the-raspberry-pico-on-arch-linux/)
+For the pico-sdk, follow the guide in [Raspberry Pi Pico C/C++ SDK](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) for Windows and Debian-based<sup>[1]</sup> systems. Since I use Arch, I followed this guide to install the sdk: [Arch Linux guide](https://loads.pickle.me.uk/2021/01/25/compiling-for-the-raspberry-pico-on-arch-linux/)
 
 [1]: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf#quick-setup-section
 
-ensure that the PICO_SDK_PATH refers to the actual path of the sdk
+ensure that the PICO_SDK_PATH refers to the actual path of pico-sdk
 
 ```bash
 echo $PICO_SDK_PATH
@@ -40,11 +40,11 @@ These pin numbers can be changed as per your layout:
 
 https://github.com/risb21/pico-shape-detection/blob/c49df2e475957c3951cbea68f9695f93edb6cc59/src/main.cpp#L16-L27
 
-In the repository directory, create a build directory, cd into it and run cmake and then make
+In the repository directory, create a build directory, cd into it, run cmake and then make
 
 ```bash
 mkdir build && cd build
-cmake ../ -DPICO_BOARD=pico-w
+cmake ../
 make -j4
 ```
 
@@ -73,6 +73,4 @@ ls /dev | grep ttyACM
 
 using minicom, connect to the serial terminal
 
-```bash
-sudo minicom -b 115200 -o -D /dev/ttyACM1
-```
+<pre><code>sudo minicom -b 115200 -o -D /dev/ttyACM<b><u>n</u></b></code></pre>
