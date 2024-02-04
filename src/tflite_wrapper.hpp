@@ -5,6 +5,7 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+#include "MPU6050.hpp"
 
 #define CLASSIFIED_SHAPES 3
 
@@ -14,14 +15,14 @@ public:
     virtual ~TFLMicro();
 
     int init();
-    void* input_data();
-    void* predict();
-    bool is_op_successful(TfLiteStatus s);
 
-    float input_scale() const;
-    int32_t input_zero_point() const;
+    // template <typename T>
+    void input_data(acc_3D<float> *data_arr, size_t size);
+    
+    void* predict();
+
+    bool is_successful(TfLiteStatus s);
     TfLiteTensor *_input_tensor, *_output_tensor;
-    tflite::MicroInterpreter *_interpreter;
 
 private:
     const unsigned char* _tflite_model;
@@ -29,4 +30,5 @@ private:
     uint8_t *_tensor_arena;
 
     const tflite::Model *_model;
+    tflite::MicroInterpreter *_interpreter;
 };

@@ -7,14 +7,13 @@
 #include "hardware/gpio.h"
 #include "pico/cyw43_arch.h"
 
-// Arbirtary, the ANN has this many input nodes per acceleration handle_irq
+// Arbirtary, the ANN has this many input nodes per axis (2-D input)
 #define MAX_RECORD_LEN 83
 
 uint8_t curr_row, flags;
 
 // 83 data points, for 3 axes
 acc_3D<float> *rec_data;
-
 
 // Pin numbers for each function,
 // set according to wiring
@@ -34,7 +33,7 @@ enum Pin {
 
 };
 
-// Flags for operations used by buttons
+// Flags for operations
 enum Flag {
     record = 0b1,
     print_once = 0b1 << 1,
@@ -52,27 +51,27 @@ void struct_memset(acc_3D<T> *acc, T val, size_t size) {
 }
 
 void print_data() {
-    printf("    +-------+-------+-------+\n"
-           "    | acc_x | acc_y | acc_z |\n"
-           "    +-------+-------+-------+\n");
+    printf("    +---------+---------+---------+\n"
+           "    |  acc_x  |  acc_y  |  acc_z  |\n"
+           "    +---------+---------+---------+\n");
     for (int row = 0; row < 5; row++)
-        printf("%2d. |%7.3f|%7.3f|%7.3f|\n", row+1,
+        printf("%2d. | %7.3f | %7.3f | %7.3f |\n", row+1,
                 rec_data[row].x,
                 rec_data[row].y,
                 rec_data[row].z
         );
 
-    printf("    +-------+-------+-------+\n"
-           "               ...           \n"
-           "    +-------+-------+-------+\n");
+    printf("    +---------+---------+---------+\n"
+           "                  ...              \n"
+           "    +---------+---------+---------+\n");
     for (int row = MAX_RECORD_LEN - 5; row < MAX_RECORD_LEN; row++)
-        printf("%2d. |%7.3f|%7.3f|%7.3f|\n", row+1,
+        printf("%2d. | %7.3f | %7.3f | %7.3f |\n", row+1,
                 rec_data[row].x,
                 rec_data[row].y,
                 rec_data[row].z
         );
 
-    printf("    +-------+-------+-------+\n");
+    printf("    +---------+---------+---------+\n");
 }
 
 
@@ -94,6 +93,7 @@ void handle_irq(uint gpio, uint32_t events) {
         curr_row = 0;
         // Set record flag
         flags |= Flag::record;
+
         cyw43_arch_gpio_put(Pin::cyw43_led, 1);
         break;
     
@@ -121,15 +121,13 @@ int main() {
      setup phase 
     ------------- */
     stdio_init_all();
-
-    sleep_ms(1000);
+    sleep_ms(500);
 
     if (cyw43_arch_init()) {
         printf("[ERROR] Wi-Fi init failed\n");
         return -1;
     }
-
-    printf("LED status: %d\n", cyw43_arch_gpio_get(Pin::cyw43_led));
+    cyw43_arch_gpio_get(Pin::cyw43_led);
 
     printf("[OK] cyw43 wireless module initialized\n");
 
@@ -137,7 +135,7 @@ int main() {
     MPU6050 mpu(Pin::mpu_sda, Pin::mpu_scl);
     printf("[OK] MPU6050 accelerometer initialized\n");
 
-    // irq setup
+    // IRQ setup
     // Record button
     gpio_init(Pin::b_record);
     gpio_set_dir(Pin::b_record, GPIO_IN);
@@ -159,22 +157,12 @@ int main() {
     TFLMicro model(shape_model, shape_model_len);
     int init_status = model.init();
 
-    if (!init_status)
-        while (1) {
-            printf("[ERROR] Could not initialize model\n");
-            sleep_ms(2000);
-        }
-    printf("[OK] Machine learning model initialized\n");
-
-    // Model interaction pointers
-    float *input = model._input_tensor -> data.f;
-
-    if (input == nullptr) {
-        while (true) {
-            printf("Input tensor could not be allocated\n");
-            sleep_ms(2000);
-        }        
+    if (!init_status) {
+        printf("[ERROR] Could not initialize model\n");
+        return -1;
     }
+
+    printf("[OK] Machine learning model initialized\n");
 
     printf("[OK] Device Ready\n");
 
@@ -210,17 +198,10 @@ int main() {
             // Unset predict flag
             flags &= 0xFF ^ Flag::predict;
 
-            float scale = model.input_scale();
-            int32_t zp = model.input_zero_point();
-            for (int line = 0; line < MAX_RECORD_LEN; line++) {
-                input[line*3] = rec_data[line].x;
-                input[line*3 + 1] = rec_data[line].y;
-                input[line*3 + 2] = rec_data[line].z;
-            }
+            model.input_data(rec_data, MAX_RECORD_LEN);
+            float *predictions = reinterpret_cast<float *>(model.predict());
 
-            float *pred = reinterpret_cast<float *>(model.predict());
-
-            if (pred == nullptr) {
+            if (predictions == nullptr) {
                 printf("Error in predicting shape\n");
                 continue;
             }
@@ -228,10 +209,9 @@ int main() {
             printf("+----------+----------+----------+\n"
                    "|  Circle  |  Square  | Triangle |\n"
                    "+----------+----------+----------+\n"
-                   "| %8.3f | %8.3f | %8.3f |\n"
+                   "| %8.4f | %8.4f | %8.4f |\n"
                    "+----------+----------+----------+\n",
-                   pred[0], pred[1], pred[2]);
-
+                   predictions[0], predictions[1], predictions[2]);
         }
 
         sleep_ms(20);

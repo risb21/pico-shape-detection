@@ -1,6 +1,6 @@
 #include "tflite_wrapper.hpp"
 
-bool TFLMicro::is_op_successful(TfLiteStatus s) {
+bool TFLMicro::is_successful(TfLiteStatus s) {
     if (s != kTfLiteOk)
         return false;
     
@@ -22,6 +22,21 @@ TFLMicro::~TFLMicro() {
     if (_interpreter != nullptr) {
         delete _interpreter;
         _interpreter = nullptr;
+    }
+
+    if (_model != nullptr) {
+        delete _model;
+        _model = nullptr;
+    }
+
+    if (_input_tensor != nullptr) {
+        delete _input_tensor;
+        _input_tensor = nullptr;
+    }
+
+    if (_output_tensor != nullptr) {
+        delete _output_tensor;
+        _output_tensor = nullptr;
     }
 
     if (_tensor_arena != nullptr) {
@@ -46,80 +61,56 @@ int TFLMicro::init() {
     }
 
     static tflite::MicroMutableOpResolver<4> resolver;
-    TfLiteStatus resolve_status = resolver.AddFullyConnected();
-    if (!is_op_successful(resolve_status)) {
-        MicroPrintf("Op resolution failed");
-        return 0;
-    }
-    resolve_status = resolver.AddReshape();
-    if (!is_op_successful(resolve_status)) {
-        MicroPrintf("Op resolution failed");
-        return 0;
-    }
-    resolve_status = resolver.AddSoftmax();
-    if (!is_op_successful(resolve_status)) {
-        MicroPrintf("Op resolution failed");
-        return 0;
-    }
-    resolve_status = resolver.AddRelu();
-    if (!is_op_successful(resolve_status)) {
-        MicroPrintf("Op resolution failed");
-        return 0;
-    }
+    if (!is_successful(resolver.AddFullyConnected()))
+        goto op_error;
+    if (!is_successful(resolver.AddReshape()))
+        goto op_error;
+    if (!is_successful(resolver.AddSoftmax()))
+        goto op_error;
+    if (!is_successful(resolver.AddRelu()))
+        goto op_error;
 
     static tflite::MicroInterpreter static_interpreter(
         _model, resolver, _tensor_arena, _tensor_arena_size);
     _interpreter = &static_interpreter;
 
-    TfLiteStatus allocate_status = _interpreter -> AllocateTensors();
-    if (allocate_status != kTfLiteOk) {
+    if (!is_successful(_interpreter -> AllocateTensors())) {
         MicroPrintf("AllocateTensors() failed");
         return 0;
     }
 
     _input_tensor = static_interpreter.input(0);
-    // _output_tensor = static_interpreter.output(0);
+    _output_tensor = static_interpreter.output(0);
 
     return 1;
+
+    op_error:
+        MicroPrintf("Op resolution failed");
+        return 0;
 }
 
-void* TFLMicro::input_data() {
+void TFLMicro::input_data(acc_3D<float> *data_arr, size_t size) {
     if (_input_tensor == nullptr) {
-        return nullptr;
+        MicroPrintf("The input tensor does not exist\n");
+        return;
     }
 
-    return _input_tensor -> data.data;
+    float *input_ptr = reinterpret_cast<float *>(_input_tensor -> data.data);
+
+    for (size_t i = 0; i < size; i++) {
+        input_ptr[i*3 + 0] = data_arr[i].x;
+        input_ptr[i*3 + 1] = data_arr[i].y;
+        input_ptr[i*3 + 2] = data_arr[i].z;
+    }
 }
 
 void* TFLMicro::predict() {
     TfLiteStatus invoke_status = _interpreter -> Invoke();
 
     if (invoke_status != kTfLiteOk) {
-        MicroPrintf("Could not Invoke interpreter\n");
+        MicroPrintf("Could not invoke interpreter\n");
         return nullptr;
     }
 
-    _output_tensor = _interpreter -> output(0);
-
-    // float y_quantized = _output_tensor -> data.f;
-    // float y = (y_quantized - _output_tensor -> params.zero_point) *
-    //           _output_tensor -> params.scale;
     return _output_tensor -> data.data;
-}
-
-
-float TFLMicro::input_scale() const {
-    if (_input_tensor == NULL) {
-        return NAN;
-    }
-
-    return _input_tensor -> params.scale;
-}
-
-int32_t TFLMicro::input_zero_point() const {
-    if (_input_tensor == NULL) {
-        return 0;
-    }
-
-    return _input_tensor -> params.zero_point;
 }
