@@ -2,7 +2,7 @@
 
 #include "MPU6050.hpp"
 #include "tflite_wrapper.hpp"
-#include "shape_model.hpp"
+#include "shape_model_int8.hpp"
 
 #include "hardware/gpio.h"
 #include "pico/cyw43_arch.h"
@@ -199,7 +199,8 @@ int main() {
             flags &= 0xFF ^ Flag::predict;
 
             model.input_data(rec_data, MAX_RECORD_LEN);
-            float *predictions = reinterpret_cast<float *>(model.predict());
+            float predictions[3];
+            model.predict(predictions);
 
             if (predictions == nullptr) {
                 printf("Error in predicting shape\n");

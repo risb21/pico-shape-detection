@@ -15,14 +15,10 @@ public:
     virtual ~TFLMicro();
 
     int init();
-
-    // template <typename T>
-    void input_data(acc_3D<float> *data_arr, size_t size);
-    
-    void* predict();
+    void input_data(acc_3D<float> *data_arr, size_t size);    
+    void predict(float* data);
 
     bool is_successful(TfLiteStatus s);
-    TfLiteTensor *_input_tensor, *_output_tensor;
 
 private:
     const unsigned char* _tflite_model;
@@ -30,5 +26,6 @@ private:
     uint8_t *_tensor_arena;
 
     const tflite::Model *_model;
+    TfLiteTensor *_input_tensor, *_output_tensor;
     tflite::MicroInterpreter *_interpreter;
 };

@@ -60,7 +60,7 @@ int TFLMicro::init() {
         return 0;
     }
 
-    static tflite::MicroMutableOpResolver<4> resolver;
+    static tflite::MicroMutableOpResolver<5> resolver;
     if (!is_successful(resolver.AddFullyConnected()))
         goto op_error;
     if (!is_successful(resolver.AddReshape()))
@@ -69,6 +69,9 @@ int TFLMicro::init() {
         goto op_error;
     if (!is_successful(resolver.AddRelu()))
         goto op_error;
+    if (!is_successful(resolver.AddQuantize()))
+        goto op_error;
+
 
     static tflite::MicroInterpreter static_interpreter(
         _model, resolver, _tensor_arena, _tensor_arena_size);
@@ -95,22 +98,32 @@ void TFLMicro::input_data(acc_3D<float> *data_arr, size_t size) {
         return;
     }
 
-    float *input_ptr = reinterpret_cast<float *>(_input_tensor -> data.data);
+    sleep_ms(200);
+
+    uint8_t *input_ptr = reinterpret_cast<uint8_t *>(_input_tensor -> data.data);
 
     for (size_t i = 0; i < size; i++) {
-        input_ptr[i*3 + 0] = data_arr[i].x;
-        input_ptr[i*3 + 1] = data_arr[i].y;
-        input_ptr[i*3 + 2] = data_arr[i].z;
+        input_ptr[i*3 + 0] = (uint8_t) (data_arr[i].x / _input_tensor -> params.scale 
+                                        + _input_tensor -> params.zero_point);
+        input_ptr[i*3 + 1] = (uint8_t) (data_arr[i].y / _input_tensor -> params.scale 
+                                        + _input_tensor -> params.zero_point);
+        input_ptr[i*3 + 2] = (uint8_t) (data_arr[i].z / _input_tensor -> params.scale 
+                                        + _input_tensor -> params.zero_point);
     }
 }
 
-void* TFLMicro::predict() {
+void TFLMicro::predict(float* data) {
     TfLiteStatus invoke_status = _interpreter -> Invoke();
 
     if (invoke_status != kTfLiteOk) {
         MicroPrintf("Could not invoke interpreter\n");
-        return nullptr;
+        return;
     }
 
-    return _output_tensor -> data.data;
+    float scale = _output_tensor -> params.scale;
+    uint8_t *data_quant = reinterpret_cast<uint8_t *>(_output_tensor -> data.data), 
+             zp = _output_tensor -> params.zero_point;
+    
+    for (int i = 0; i < 3; i++)
+        data[i] = (data_quant[i] - zp) * scale;
 }
