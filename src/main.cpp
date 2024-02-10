@@ -30,7 +30,9 @@ enum Pin {
     mpu_scl,
 
     // LEDs
-
+    led_triangle = 21u,
+    led_square = 26u,
+    led_circle = 28u,
 };
 
 // Flags for operations
@@ -148,6 +150,12 @@ int main() {
     gpio_pull_down(Pin::b_predict);
     gpio_set_irq_enabled_with_callback(Pin::b_predict, GPIO_IRQ_EDGE_RISE, true, &handle_irq);
 
+    // LED setup
+    gpio_init(Pin::led_circle); gpio_init(Pin::led_square); gpio_init(Pin::led_triangle);
+    gpio_set_dir(Pin::led_circle, GPIO_OUT);
+    gpio_set_dir(Pin::led_square, GPIO_OUT);
+    gpio_set_dir(Pin::led_triangle, GPIO_OUT);
+
     flags = 0b0;
     curr_row = 0;
     rec_data = new acc_3D<float>[MAX_RECORD_LEN];
@@ -163,6 +171,9 @@ int main() {
     }
 
     printf("[OK] Machine learning model initialized\n");
+
+    const char* labels[] = {"Circle", "Square", "Triangle"};
+    const uint8_t class_pins[] = {Pin::led_circle, Pin::led_square, Pin::led_triangle};
 
     printf("[OK] Device Ready\n");
 
@@ -198,14 +209,14 @@ int main() {
             // Unset predict flag
             flags &= 0xFF ^ Flag::predict;
 
+            // Clear all classification LEDs
+            for (uint8_t pin: class_pins)
+                gpio_put(pin, 0);
+
             model.input_data(rec_data, MAX_RECORD_LEN);
+
             float predictions[3];
             model.predict(predictions);
-
-            if (predictions == nullptr) {
-                printf("Error in predicting shape\n");
-                continue;
-            }
 
             printf("+----------+----------+----------+\n"
                    "|  Circle  |  Square  | Triangle |\n"
@@ -213,6 +224,14 @@ int main() {
                    "| %8.4f | %8.4f | %8.4f |\n"
                    "+----------+----------+----------+\n",
                    predictions[0], predictions[1], predictions[2]);
+            
+            int max_probability_idx = 0;
+            for (int i = 0; i < 3; i++)
+                max_probability_idx = predictions[max_probability_idx] > predictions[i] ?
+                                      max_probability_idx : i;
+
+            gpio_put(class_pins[max_probability_idx], 1);
+            printf("\nPredicted shape: %s\n\n", labels[max_probability_idx]);
         }
 
         sleep_ms(20);

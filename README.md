@@ -9,8 +9,8 @@ Running a shape detection machine learning model using accelerometer data on the
 - [x] Store accelerometer data on button press
 - [x] Make tflite-micro library interface 
 - [x] Feed captured data into the model 
-- [ ] Display classification on LEDs 
-- [ ] Error Handling 
+- [x] Display classification on LEDs 
+- [x] Error Handling 
 
 ---
 
