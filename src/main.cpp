@@ -76,6 +76,25 @@ void print_data() {
     printf("    +---------+---------+---------+\n");
 }
 
+// Flash an LED n times
+void led_n_flash(uint8_t gpio, int n = 2, uint32_t delay_ms = 200, bool onboard = true) {
+    if (onboard) {
+        cyw43_arch_gpio_put(gpio, 0);
+        
+        for (int i = 0; i < 2*n - 1; i++) {
+            cyw43_arch_gpio_put(gpio, !cyw43_arch_gpio_get(gpio));
+            sleep_ms(delay_ms);
+        }
+        cyw43_arch_gpio_put(gpio, 0);
+    } else {
+        gpio_put(gpio, 0);
+        for (int i = 0; i < 2*n - 1; i++) {
+            gpio_put(gpio, !gpio_get(gpio));
+            sleep_ms(delay_ms);
+        }
+        gpio_put(gpio, 0);
+    }
+}
 
 void handle_irq(uint gpio, uint32_t events) {
     // Handle predict button
@@ -176,6 +195,7 @@ int main() {
     const uint8_t class_pins[] = {Pin::led_circle, Pin::led_square, Pin::led_triangle};
 
     printf("[OK] Device Ready\n");
+    led_n_flash(Pin::cyw43_led, 2, 150, true);
 
  /* -----------
      Job loop 
